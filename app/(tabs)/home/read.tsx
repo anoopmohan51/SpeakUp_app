@@ -1,98 +1,64 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Mic, CircleStop as StopCircle } from 'lucide-react-native';
-import Animated, { FadeInDown, useAnimatedStyle, withTiming, useSharedValue } from 'react-native-reanimated';
+import { Play, PauseCircle, RotateCcw, MessageSquare } from 'lucide-react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Audio } from 'expo-av';
 import Button from '../../../components/Button';
 import Colors from '../../../constants/Colors';
 
-export default function ReadScreen() {
+export default function ListeningScreen() {
   const router = useRouter();
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'recorded'>('idle');
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  
-  const animatedHeight = useSharedValue(0);
-  const randomHeights = Array.from({ length: 30 }, () => Math.random() * 0.8 + 0.2);
-  
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      height: withTiming(animatedHeight.value * 100, { duration: 300 }),
-    };
-  });
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasListened, setHasListened] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
 
-  async function startRecording() {
+  const audioText = "Technology has dramatically changed how we communicate in the modern world. People can instantly connect with friends and family across the globe through video calls and messaging apps. While this has many advantages, it's important to maintain a healthy balance between digital connections and real-life interactions.";
+
+  const playAudio = async () => {
     try {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-      
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      
-      setRecording(recording);
-      setRecordingStatus('recording');
-      setRecordingDuration(0);
-      
-      timerRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-        animatedHeight.value = Math.random() * 0.8 + 0.2;
-      }, 1000);
-      
-    } catch (err) {
-      console.error('Failed to start recording', err);
+      if (sound) {
+        if (isPlaying) {
+          await sound.pauseAsync();
+          setIsPlaying(false);
+        } else {
+          await sound.playAsync();
+          setIsPlaying(true);
+        }
+      } else {
+        // Simulate loading and playing audio
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          require('../../../assets/audio/sample.mp3'),
+          { shouldPlay: true }
+        );
+        
+        setSound(newSound);
+        setIsPlaying(true);
+        
+        newSound.setOnPlaybackStatusUpdate((status) => {
+          if (status.didJustFinish) {
+            setIsPlaying(false);
+            setHasListened(true);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error playing audio:', error);
     }
-  }
+  };
 
-  async function stopRecording() {
-    if (!recording) return;
-    
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+  const restartAudio = async () => {
+    if (sound) {
+      await sound.stopAsync();
+      await sound.playFromPositionAsync(0);
+      setIsPlaying(true);
     }
-
-    setRecordingStatus('recorded');
-    
-    try {
-      await recording.stopAndUnloadAsync();
-      setRecording(null);
-    } catch (err) {
-      console.error('Failed to stop recording', err);
-    }
-  }
+  };
 
   const handleContinue = useCallback(() => {
     router.push('/(tabs)/home/readAgain');
   }, [router]);
-
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const renderWaveform = () => {
-    return (
-      <View style={styles.waveformContainer}>
-        {randomHeights.map((height, index) => (
-          <Animated.View
-            key={index}
-            style={[
-              styles.waveformBar,
-              { height: recordingStatus === 'recording' ? undefined : height * 60 },
-              recordingStatus === 'recording' ? animatedStyle : null
-            ]}
-          />
-        ))}
-      </View>
-    );
-  };
 
   return (
     <ScrollView 
@@ -104,57 +70,67 @@ export default function ReadScreen() {
         style={styles.headerContainer}
         entering={FadeInDown.duration(500)}
       >
-        <Text style={styles.title}>Read this topic aloud</Text>
+        <Text style={styles.title}>Listen to this conversation</Text>
         <Text style={styles.subtitle}>
-          Please read the following passage out loud. This helps us evaluate your pronunciation and fluency.
+          Listen carefully to the audio. You can replay it as many times as you need.
         </Text>
       </Animated.View>
 
       <Animated.View 
-        style={styles.passageContainer}
+        style={styles.audioPlayerContainer}
         entering={FadeInDown.delay(200).duration(500)}
       >
-        <Text style={styles.passageText}>
-          Technology has dramatically changed how we communicate in the modern world. People can instantly connect with friends and family across the globe through video calls and messaging apps. While this has many advantages, it's important to maintain a healthy balance between digital connections and real-life interactions. What do you think about this topic?
-        </Text>
-      </Animated.View>
-
-      <View style={styles.recordingContainer}>
-        {recordingStatus === 'idle' ? (
+        <View style={styles.playerControls}>
           <TouchableOpacity 
-            style={styles.recordButton}
-            onPress={startRecording}
+            style={styles.playButton}
+            onPress={playAudio}
           >
-            <Mic size={28} color="#FFF" />
-            <Text style={styles.recordButtonText}>Tap to Start Reading</Text>
+            {isPlaying ? (
+              <PauseCircle size={64} color={Colors.primary} />
+            ) : (
+              <Play size={64} color={Colors.primary} />
+            )}
           </TouchableOpacity>
-        ) : (
-          <Animated.View 
-            style={styles.recordingInterface}
-            entering={FadeInDown.duration(400)}
+
+          <TouchableOpacity 
+            style={styles.restartButton}
+            onPress={restartAudio}
           >
-            {renderWaveform()}
-            <View style={styles.recordingControls}>
-              <Text style={styles.recordingTime}>{formatTime(recordingDuration)}</Text>
-              {recordingStatus === 'recording' && (
-                <TouchableOpacity 
-                  style={styles.stopButton}
-                  onPress={stopRecording}
-                >
-                  <StopCircle size={56} color={Colors.error} />
-                </TouchableOpacity>
-              )}
-            </View>
+            <RotateCcw size={24} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity 
+          style={styles.transcriptButton}
+          onPress={() => setShowTranscript(!showTranscript)}
+        >
+          <MessageSquare size={20} color={Colors.primary} />
+          <Text style={styles.transcriptButtonText}>
+            {showTranscript ? 'Hide Transcript' : 'Show Transcript'}
+          </Text>
+        </TouchableOpacity>
+
+        {showTranscript && (
+          <Animated.View 
+            style={styles.transcriptContainer}
+            entering={FadeInDown.duration(300)}
+          >
+            <Text style={styles.transcriptText}>{audioText}</Text>
           </Animated.View>
         )}
-      </View>
+      </Animated.View>
 
       <View style={styles.footer}>
         <Button 
           title="Continue" 
           onPress={handleContinue}
-          disabled={recordingStatus !== 'recorded'}
+          disabled={!hasListened}
         />
+        {!hasListened && (
+          <Text style={styles.helperText}>
+            Please listen to the audio before continuing
+          </Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -170,7 +146,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   headerContainer: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   title: {
     fontFamily: 'Poppins-SemiBold',
@@ -184,78 +160,69 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     lineHeight: 24,
   },
-  passageContainer: {
+  audioPlayerContainer: {
     backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 16,
+    padding: 24,
     marginBottom: 32,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.accent,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  passageText: {
+  playerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  playButton: {
+    marginRight: 24,
+  },
+  restartButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.cardBackground,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transcriptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.primaryLight,
+  },
+  transcriptButtonText: {
     fontFamily: 'Inter-Medium',
-    fontSize: 16,
-    color: Colors.text,
-    lineHeight: 26,
-  },
-  recordingContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-    minHeight: 150,
-  },
-  recordButton: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  recordButtonText: {
-    fontFamily: 'Inter-SemiBold',
     fontSize: 14,
-    color: '#FFF',
-    marginTop: 12,
-    textAlign: 'center',
-    paddingHorizontal: 8,
+    color: Colors.primary,
+    marginLeft: 8,
   },
-  recordingInterface: {
+  transcriptContainer: {
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
     width: '100%',
-    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  recordingControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 24,
-  },
-  recordingTime: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 20,
+  transcriptText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 15,
     color: Colors.text,
-    marginRight: 32,
-  },
-  stopButton: {
-    padding: 8,
-  },
-  waveformContainer: {
-    width: '100%',
-    height: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  waveformBar: {
-    width: 4,
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
+    lineHeight: 24,
   },
   footer: {
-    marginTop: 16,
+    marginTop: 'auto',
+  },
+  helperText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 12,
   },
 });
