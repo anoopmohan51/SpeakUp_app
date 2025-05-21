@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Play, PauseCircle, RotateCcw, MessageSquare } from 'lucide-react-native';
+import { Play, CirclePause as PauseCircle, RotateCcw, MessageSquare } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Audio } from 'expo-av';
 import Button from '../../../components/Button';
